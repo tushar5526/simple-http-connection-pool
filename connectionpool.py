@@ -17,7 +17,7 @@ class MaxRetryError(HTTPError):
 
 # Response objects
 
-class HTTPResponse(object):
+class HTTPResponse:
     """
     HTTP Response container.
 
@@ -67,7 +67,7 @@ class HTTPConnectionPool(object):
         httplib.HTTPConnection()
 
     port
-        Port used for this HTTP Connection (None is equivalent to 80), passed
+        Port used for this HTTP Connection (None is equivalent to 8000), passed
         into httplib.HTTPConnection()
 
     timeout
@@ -102,40 +102,6 @@ class HTTPConnectionPool(object):
         self.num_connections = 0
         self.num_requests = 0
 
-    @staticmethod
-    def get_host(url):
-        """
-        Given a url, return its host and port (None if it's not there).
-
-        For example:
-        >>> HTTPConnectionPool.get_host('http://google.com/mail/')
-        google.com, None
-        >>> HTTPConnectionPool.get_host('google.com:80')
-        google.com, 80
-        """
-        # This code is actually similar to urlparse.urlsplit, but much
-        # simplified for our needs.
-        port = None
-        if '//' in url:
-            scheme, url = url.split('//', 1)
-        if '/' in url:
-            url, path = url.split('/', 1)
-        if ':' in url:
-            url, port = url.split(':', 1)
-            port = int(port)
-        return url, port
-
-    @staticmethod
-    def from_url(url, timeout=None, maxsize=10):
-        """
-        Given a url, return an HTTPConnectionPool instance of its host.
-
-        This is a shortcut for not having to determine the host of the url
-        before creating an HTTPConnectionPool instance.
-        """
-        host, port = HTTPConnectionPool.get_host(url)
-        return HTTPConnectionPool(host, port=port, timeout=timeout, maxsize=maxsize)
-
     def _new_conn(self):
         """
         Return a fresh HTTPConnection.
@@ -167,7 +133,6 @@ class HTTPConnectionPool(object):
         exceeded maxsize. If connections are discarded frequently, then maxsize
         should be increased.
         """
-        # print("putting connection")
         try:
             self.pool.put(conn, block=False)
         except Full:
@@ -209,8 +174,6 @@ class HTTPConnectionPool(object):
             conn.request(method, url, body=body, headers=headers)
             conn.sock.settimeout(self.timeout)
             httplib_response = conn.getresponse()
-            # # print("\"%s %s %s\" %s %s" % (
-            #     method, url, conn._http_vsn_str, httplib_response.status, httplib_response.length))
 
             # from_httplib will perform httplib_response.read() which will have
             # the side effect of letting us use this connection for another
@@ -225,12 +188,12 @@ class HTTPConnectionPool(object):
             raise TimeoutError("Request timed out after %f seconds" % self.timeout)
 
         except (HTTPException, error) as e:
-            # print("Retrying (%d attempts remain) after connection broken by '%r': %s" % (retries, e, url))
+            print("Retrying (%d attempts remain) after connection broken by '%r': %s" % (retries, e, url))
             return self.urlopen(method, url, body, headers, retries - 1, redirect)  # Try again
 
         # Handle redirection
         if redirect and response.status in [301, 302, 303, 307] and 'location' in response.headers:  # Redirect, retry
-            # print("Redirecting %s -> %s" % (url, response.headers.get('location')))
+            print("Redirecting %s -> %s" % (url, response.headers.get('location')))
             return self.urlopen(method, response.headers.get('location'), body, headers, retries - 1, redirect)
 
         return response
@@ -250,24 +213,3 @@ class HTTPConnectionPool(object):
             url += '?' + urlencode(fields)
         return self.urlopen('GET', url, headers=headers, retries=retries, redirect=redirect)
 
-    def post_url(self, url, body=None, headers=None, retries=3, redirect=True):
-        """
-        Wrapper for performing POST with urlopen (see urlopen for more details).
-
-        Supports an optional ``fields`` parameter of key/value strings AND
-        key/filetuple. A filetuple is a (filename, data) tuple. For example:
-
-        fields = {
-            'foo': 'bar',
-            'foofile': ('foofile.txt', 'contents of foofile'),
-        }
-
-        NOTE: If ``headers`` are supplied, the 'Content-Type' value will be
-        overwritten because it depends on the dynamic random boundary string
-        which is used to compose the body of the request.
-        """
-        if headers is None:
-            headers = {}
-        if body is None:
-            body = {}
-        return self.urlopen('POST', url, body, headers=headers, retries=retries, redirect=redirect)

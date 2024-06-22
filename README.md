@@ -1,4 +1,4 @@
-# Thread safe basic HTTP Connection Pool for single host
+# Thread safe basic HTTP Connection Pool
 
 I made this simple connection pool while going through the code base of urllib3. It is a thread safe connection pool that can only handle the requests for a single host. 
 
